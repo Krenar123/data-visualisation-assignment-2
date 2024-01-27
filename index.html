@@ -52,7 +52,7 @@ const svg = d3.select("#chart-container-2")
   .append("g")
   .attr("transform", `translate(${margin.left},${margin.top})`);
 
-d3.csv("real_estate_sales_2001-2020_GL.csv").then(function(data) {
+d3.csv("real_estate_sales_2001-2020_cropped.csv").then(function(data) {
   dataResidential = data.filter(function(d) {
     return d["Residential Type"] && d["Sale Amount"];
   });
