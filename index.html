@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Real Estate Price Visualization</title>
+  <script src="https://d3js.org/d3.v5.min.js"></script>
+</head>
+<body>
+<style>
+  path {
+    fill: none;
+  }
+  .assessed-line {
+    stroke: #029691;
+  }
+
+  .sale-line {
+    stroke: #BA513B;
+  }
+
+  .legend-circle {
+    fill: none;
+    stroke-width: 2;
+    stroke-opacity: 0.7;
+  }
+
+  .legend-text {
+    font-size: 12px;
+  }
+</style>
+<div id="chart-container"></div>
+<div id="chart-container-2"></div>
+
+<script>
+// Set up the chart dimensions
+var margin = { top: 20, right: 30, bottom: 30, left: 50 },
+    width = 800 - margin.left - margin.right,
+    height = 400 - margin.top - margin.bottom;
+
+var svgResidential = d3.select("#chart-container")
+  .append("svg")
+  .attr("width", width + margin.left + margin.right)
+  .attr("height", height + margin.top + margin.bottom)
+  .append("g")
+  .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+const svg = d3.select("#chart-container-2")
+  .append("svg")
+  .attr("width", width + margin.left + margin.right)
+  .attr("height", height + margin.top + margin.bottom)
+  .append("g")
+  .attr("transform", `translate(${margin.left},${margin.top})`);
+
+d3.csv("real_estate_sales_2001-2020_GL.csv").then(function(data) {
+  dataResidential = data.filter(function(d) {
+    return d["Residential Type"] && d["Sale Amount"];
+  });
+
+  dataResidential.forEach(function(d) {
+    d["Assessed Value"] = +d["Assessed Value"];
+    d["Sale Amount"] = +d["Sale Amount"];
+    d["List Year"] = +d["List Year"];
+  });
+
+  var groupedDataResidential = d3.nest()
+    .key(function(d) { return d["Residential Type"]; })
+    .key(function(d) { return +d["List Year"]; })
+    .rollup(values => ({
+      AvgSaleAmount: d3.mean(values, d => d["Sale Amount"])
+    }))
+    .entries(dataResidential);
+
+  groupedDataResidential.forEach(function(d) {
+    d.values.sort((a, b) => a.key - b.key);
+  });
+
+  var colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+
+  console.log(groupedDataResidential);
+
+  const filteredDataResidential = groupedDataResidential.filter(d => !isNaN(d.values[0].value.AvgSaleAmount));
+
+  var xScaleResidential = d3.scaleLinear()
+    .domain([2001, 2020])
+    .range([0, width]);
+
+  const yScaleResidential = d3.scaleLinear()
+    .domain([0, d3.max(filteredDataResidential, d => d3.max(d.values, v => v.value.AvgSaleAmount))])
+    .range([height, 0]);
+
+  var line = d3.line()
+    .x(function(d) { return xScaleResidential(+d.key); })
+    .y(function(d) { return yScaleResidential(+d.value.AvgSaleAmount); });
+
+  svgResidential.selectAll(".line")
+    .data(filteredDataResidential)
+    .enter().append("path")
+    .attr("class", "line")
+    .attr("d", function(d) { return line(d.values); })
+    .style("stroke", function(d) { return colorScale(d.key); });
+
+  svgResidential.append("g")
+    .attr("transform", "translate(0," + height + ")")
+    .call(d3.axisBottom(xScaleResidential).ticks(20))
+    .append("text")
+    .attr("x", width / 2)
+    .attr("y", margin.bottom - 5)
+    .attr("dy", "0.71em")
+    .attr("fill", "#000")
+    .text("Year");
+
+  svgResidential.append("g")
+    .call(d3.axisLeft(yScaleResidential))
+    .append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -height / 2)
+    .attr("y", -margin.left + 15)
+    .attr("dy", "0.71em")
+    .attr("fill", "#000")
+    .text("Average Sale Amount");
+
+  var legendResidential = svgResidential.selectAll(".legend")
+    .data(filteredDataResidential.map(function(d) { return d.key; }))
+    .enter().append("g")
+    .attr("class", "legend")
+    .attr("transform", function(d, i) { return "translate(0," + i * 20 + ")"; });
+
+  legendResidential.append("rect")
+    .attr("x", width - 18)
+    .attr("width", 18)
+    .attr("height", 18)
+    .style("fill", function(d) { return colorScale(d); });
+
+  legendResidential.append("text")
+    .attr("x", width - 24)
+    .attr("y", 9)
+    .attr("dy", ".35em")
+    .style("text-anchor", "end")
+    .text(function(d) { return d; });
+
+  data.forEach(function(d) {
+    d["Assessed Value"] = +d["Assessed Value"];
+    d["Sale Amount"] = +d["Sale Amount"];
+    d["List Year"] = +d["List Year"];
+  });
+
+  const groupedData = d3.nest()
+    .key(d => d["List Year"])
+    .rollup(values => ({
+      AvgAssessedValue: d3.mean(values, d => d["Assessed Value"]),
+      AvgSaleAmount: d3.mean(values, d => d["Sale Amount"])
+    }))
+    .entries(data)
+    .map(entry => ({
+      "List Year": +entry.key,
+      AvgAssessedValue: entry.value.AvgAssessedValue,
+      AvgSaleAmount: entry.value.AvgSaleAmount
+    }));
+
+  const filteredData = groupedData.filter(d => !isNaN(d.AvgAssessedValue) && !isNaN(d.AvgSaleAmount));
+
+  const xScale = d3.scaleLinear()
+    .domain(d3.extent(filteredData, d => d["List Year"]))
+    .range([0, width]);
+
+  const yScale = d3.scaleLinear()
+    .domain([0, d3.max(filteredData, d => Math.max(d.AvgAssessedValue, d.AvgSaleAmount))])
+    .range([height, 0]);
+
+  const xAxis = d3.axisBottom(xScale).tickFormat(d3.format("d"));
+  const yAxis = d3.axisLeft(yScale);
+
+  const assessedLine = d3.line()
+    .x(d => xScale(d["List Year"]))
+    .y(d => yScale(d.AvgAssessedValue))
+    .curve(d3.curveCatmullRom);
+
+  svg.append("path")
+    .data([filteredData])
+    .attr("class", "assessed-line")
+    .attr("d", assessedLine)
+    .style("fill", "none");
+
+  svg.append("circle")
+    .attr("cx", width - 120)
+    .attr("cy", 10)
+    .attr("r", 5)
+    .attr("class", "legend-circle")
+    .style("stroke", "#029691");
+
+  svg.append("text")
+    .attr("x", width - 100)
+    .attr("y", 15)
+    .attr("fill", "#029691")
+    .text("Assessed Value")
+    .attr("class", "legend-text");
+
+  const saleLine = d3.line()
+    .x(d => xScale(d["List Year"]))
+    .y(d => yScale(d.AvgSaleAmount))
+    .curve(d3.curveCatmullRom);
+
+  svg.append("path")
+    .data([filteredData])
+    .attr("class", "sale-line")
+    .attr("d", saleLine)
+    .style("fill", "none");
+
+  svg.append("circle")
+    .attr("cx", width - 120)
+    .attr("cy", 30)
+    .attr("r", 5)
+    .attr("class", "legend-circle")
+    .style("stroke", "#BA513B");
+
+  svg.append("text")
+    .attr("x", width - 100)
+    .attr("y", 35)
+    .attr("fill", "#BA513B")
+    .text("Sale Amount")
+    .attr("class", "legend-text");
+
+  svg.append("g")
+    .attr("transform", `translate(0, ${height})`)
+    .call(xAxis)
+    .append("text")
+    .attr("x", width / 2)
+    .attr("y", margin.bottom - 10)
+    .attr("fill", "#000")
+    .text("List Year");
+
+  svg.append("g")
+    .call(yAxis)
+    .append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("y", -margin.left)
+    .attr("x", -height / 2)
+    .attr("dy", "1em")
+    .attr("fill", "#000")
+    .text("Average Price");
+});
+
+</script>
+
+</body>
+</html>
